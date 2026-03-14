@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Oswald:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Oswald", sans-serif;
+  --color-wbc-blue: #002D4B;
+  --color-wbc-gold: #FFD700;
+  --color-wbc-red: #C41E3A;
+}
+
+@layer base {
+  body {
+    @apply bg-transparent;
+    font-family: var(--font-sans);
+  }
+}
+
+@layer components {
+  .sports-text {
+    font-family: var(--font-display);
+    @apply font-bold uppercase tracking-tight;
+  }
+  
+  .glass-panel {
+    @apply bg-black/80 backdrop-blur-sm border border-white/10;
+  }
+
+  .wbc-gradient-blue {
+    background: linear-gradient(to bottom, #003d66, #001a2c);
+  }
+
+  .wbc-gradient-red {
+    background: linear-gradient(to bottom, #e62e4d, #99172b);
+  }
+
+  .wbc-trapezoid-top {
+    clip-path: polygon(2% 0%, 98% 0%, 100% 100%, 0% 100%);
+  }
+
+  .wbc-trapezoid-bottom {
+    clip-path: polygon(0% 0%, 100% 0%, 98% 100%, 2% 100%);
+  }
+
+  .wbc-bevel {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 4px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .indicator-dot {
+    @apply w-3 h-3 rounded-full border border-white/20 transition-all duration-300;
+  }
+
+  .indicator-dot.active-ball {
+    @apply bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)];
+  }
+
+  .indicator-dot.active-strike {
+    @apply bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)];
+  }
+
+  .indicator-dot.active-out {
+    @apply bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)];
+  }
+}
+
+/* Custom animations for score changes */
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); color: #fbbf24; }
+  100% { transform: scale(1); }
+}
+
+.animate-score-change {
+  animation: score-pop 0.5s ease-out;
+}
+
