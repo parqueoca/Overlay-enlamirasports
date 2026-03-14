@@ -50,7 +50,57 @@ const INITIAL_STATE: GameState = {
 
 // --- Components ---
 
-const VictoryOverlay = ({ state }: { state: GameState }) => {
+const ResponsiveOverlay = ({ children }: { children: React.ReactNode }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 1920, height: 1080, scale: 1 });
+
+  useEffect(() => {
+    const updateScale = () => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        const baseWidth = 1920;
+        const baseHeight = 1080;
+        
+        // Scale to fit width, but also consider height to avoid vertical overflow
+        const scaleX = width / baseWidth;
+        const scaleY = height / baseHeight;
+        const scale = Math.min(scaleX, scaleY);
+        
+        setDimensions({ width, height, scale });
+      }
+    };
+
+    const observer = new ResizeObserver(updateScale);
+    if (containerRef.current) observer.observe(containerRef.current);
+    
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, []);
+
+  return (
+    <div ref={containerRef} className="w-full h-screen relative bg-transparent overflow-hidden flex items-center justify-center">
+      <div 
+        style={{ 
+          width: '1920px', 
+          height: '1080px', 
+          position: 'relative',
+          transform: `scale(${dimensions.scale})`,
+          transformOrigin: 'center center',
+          pointerEvents: 'none',
+          flexShrink: 0
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
+const VictoryOverlay = ({ state, isPreview = false }: { state: GameState; isPreview?: boolean }) => {
   const winner = state.away.runs > state.home.runs ? state.away : state.home.runs > state.away.runs ? state.home : null;
   const isDraw = state.away.runs === state.home.runs;
 
@@ -58,7 +108,7 @@ const VictoryOverlay = ({ state }: { state: GameState }) => {
     <motion.div 
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none"
+      className={`${isPreview ? 'absolute' : 'fixed'} inset-0 z-[100] flex items-center justify-center pointer-events-none`}
     >
       <div className="w-[450px] bg-[#0a1a2a]/98 border-2 border-wbc-gold rounded-xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] wbc-bevel pointer-events-auto relative">
         {/* Subtle Celebration Background */}
@@ -522,16 +572,16 @@ export default function App() {
 
   if (isOverlayMode) {
     return (
-      <div className="w-full h-screen relative bg-transparent overflow-hidden">
+      <ResponsiveOverlay>
         <AnimatePresence>
-          {state.isFinal && <VictoryOverlay state={state} />}
+          {state.isFinal && <VictoryOverlay state={state} isPreview={true} />}
           {state.showHeader && (
             <motion.div 
               key="header-overlay"
               initial={{ y: -100 }}
               animate={{ y: 0 }}
               exit={{ y: -100 }}
-              className="fixed top-8 left-1/2 -translate-x-1/2 w-[95%] max-w-[1100px] z-[110]"
+              className="absolute top-8 left-1/2 -translate-x-1/2 w-[95%] max-w-[1100px] z-[110]"
             >
               <HeaderOverlay state={state} />
             </motion.div>
@@ -542,7 +592,7 @@ export default function App() {
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="fixed top-[15%] left-1/2 -translate-x-1/2 w-[90%] max-w-[1000px] z-[100]"
+              className="absolute top-[15%] left-1/2 -translate-x-1/2 w-[90%] max-w-[1000px] z-[100]"
             >
               <BoxScore state={state} />
             </motion.div>
@@ -553,13 +603,13 @@ export default function App() {
               initial={{ y: 100 }}
               animate={{ y: 0 }}
               exit={{ y: 100 }}
-              className="fixed bottom-12 left-1/2 -translate-x-1/2 w-[90%] max-w-[900px] z-[90]"
+              className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[90%] max-w-[900px] z-[90]"
             >
               <Scorebug state={state} />
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </ResponsiveOverlay>
     );
   }
 
@@ -606,7 +656,7 @@ export default function App() {
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="w-[1920px] h-[1080px] shrink-0 origin-center scale-[0.28] sm:scale-[0.35] md:scale-[0.42] lg:scale-[0.30] xl:scale-[0.40] relative">
                 <AnimatePresence>
-                  {state.isFinal && <VictoryOverlay state={state} />}
+                  {state.isFinal && <VictoryOverlay state={state} isPreview={true} />}
                   {state.showHeader && (
                     <motion.div 
                       key="header-preview"
