@@ -1,0 +1,33 @@
+{
+  "entities": {
+    "GameState": {
+      "title": "Game State",
+      "description": "The current state of the baseball game",
+      "type": "object",
+      "properties": {
+        "homeScore": { "type": "integer", "description": "Score of the home team" },
+        "awayScore": { "type": "integer", "description": "Score of the away team" },
+        "inning": { "type": "integer", "description": "Current inning number" },
+        "isTopInning": { "type": "boolean", "description": "True if it's the top of the inning" },
+        "outs": { "type": "integer", "description": "Number of outs" },
+        "balls": { "type": "integer", "description": "Number of balls" },
+        "strikes": { "type": "integer", "description": "Number of strikes" },
+        "bases": { 
+          "type": "array", 
+          "items": { "type": "boolean" },
+          "description": "State of the bases [first, second, third]"
+        },
+        "homeName": { "type": "string", "description": "Name of the home team" },
+        "awayName": { "type": "string", "description": "Name of the away team" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["homeScore", "awayScore", "inning", "isTopInning", "outs", "balls", "strikes", "bases", "homeName", "awayName"]
+    }
+  },
+  "firestore": {
+    "/games/{gameId}": {
+      "schema": "GameState",
+      "description": "Collection of games"
+    }
+  }
+}

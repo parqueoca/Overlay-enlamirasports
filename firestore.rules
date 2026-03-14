@@ -1,0 +1,59 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: games
+// Document ID: gameId (e.g., 'current')
+// Fields:
+//   - homeScore: number (required)
+//   - awayScore: number (required)
+//   - inning: number (required)
+//   - isTopInning: boolean (required)
+//   - outs: number (required)
+//   - balls: number (required)
+//   - strikes: number (required)
+//   - bases: list of booleans (required)
+//   - homeName: string (required)
+//   - awayName: string (required)
+//   - updatedAt: timestamp (optional)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidGameState(data) {
+      return data.homeScore is int && data.homeScore >= 0 &&
+             data.awayScore is int && data.awayScore >= 0 &&
+             data.inning is int && data.inning >= 1 &&
+             data.isTopInning is bool &&
+             data.outs is int && data.outs >= 0 && data.outs <= 3 &&
+             data.balls is int && data.balls >= 0 && data.balls <= 4 &&
+             data.strikes is int && data.strikes >= 0 && data.strikes <= 3 &&
+             data.bases is list && data.bases.size() == 3 &&
+             data.homeName is string && data.homeName.size() <= 50 &&
+             data.awayName is string && data.awayName.size() <= 50;
+    }
+
+    match /games/{gameId} {
+      // Allow anyone to read the game state (for the overlay)
+      // In a production app, we might restrict this, but for a public overlay it's common.
+      // However, per instructions, we should require auth if possible.
+      // Since we use signInAnonymously, isAuthenticated() is enough.
+      allow read: if isAuthenticated();
+      
+      // Allow authenticated users to update the game state
+      allow write: if isAuthenticated() && isValidGameState(request.resource.data);
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
