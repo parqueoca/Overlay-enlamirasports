@@ -42,13 +42,10 @@ service cloud.firestore {
     }
 
     match /games/{gameId} {
-      // Allow anyone to read the game state (for the overlay)
-      // In a production app, we might restrict this, but for a public overlay it's common.
-      // However, per instructions, we should require auth if possible.
-      // Since we use signInAnonymously, isAuthenticated() is enough.
-      allow read: if isAuthenticated();
+      // Allow anyone to read the game state (needed for OBS overlay)
+      allow read: if true;
       
-      // Allow authenticated users to update the game state
+      // Only authenticated users (like the operator) can update the game state
       allow write: if isAuthenticated() && isValidGameState(request.resource.data);
     }
 
