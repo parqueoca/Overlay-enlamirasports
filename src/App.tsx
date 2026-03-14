@@ -396,6 +396,8 @@ export default function App() {
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
+  const [isLoaded, setIsLoaded] = useState(false);
+
   useEffect(() => {
     const gameDoc = doc(db, 'games', 'current');
     
@@ -404,16 +406,15 @@ export default function App() {
         const remoteState = snapshot.data() as GameState;
         const mergedState = { ...INITIAL_STATE, ...remoteState };
         
-        // Only update if the state is actually different
         if (JSON.stringify(mergedState) !== JSON.stringify(stateRef.current)) {
           isUpdatingFromRemote.current = true;
           setState(mergedState);
-          // Small timeout to reset the flag after the state update cycle
           setTimeout(() => { isUpdatingFromRemote.current = false; }, 50);
         }
+        setIsLoaded(true);
       } else if (!isOverlayMode) {
-        // If doc doesn't exist and we are the operator, create it
         setDoc(gameDoc, INITIAL_STATE);
+        setIsLoaded(true);
       }
     }, (error) => {
       console.error("Firestore sync error:", error);
@@ -535,6 +536,17 @@ export default function App() {
       return newState;
     });
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-wbc-blue flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-wbc-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="sports-text text-wbc-gold italic">CONECTANDO A LA NUBE...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isOverlayMode) {
     return (
