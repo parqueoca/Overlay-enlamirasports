@@ -8,7 +8,7 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   const wss = new WebSocketServer({ server });
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   let gameState: any = null;
 
