@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronUp, ChevronDown, Plus, Minus, RotateCcw, Settings, Monitor, Layout, Trophy, PartyPopper, Star } from 'lucide-react';
+import { db } from './lib/firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 // --- Types & Constants ---
 
@@ -390,77 +392,41 @@ export default function App() {
     return false;
   });
 
-  const socketRef = React.useRef<WebSocket | null>(null);
-  const lastSentStateRef = React.useRef<string>('');
-
-  const stateRef = React.useRef(state);
+  const isUpdatingFromRemote = useRef(false);
+  const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const gameDoc = doc(db, 'games', 'current');
     
-    const connect = () => {
-      const socket = new WebSocket(wsUrl);
-      socketRef.current = socket;
-
-      socket.onopen = () => {
-        console.log("Connected to sync server");
-        if (isOverlayMode) {
-          socket.send(JSON.stringify({ type: 'REQUEST_STATE' }));
-        } else {
-          const stateStr = JSON.stringify(stateRef.current);
-          lastSentStateRef.current = stateStr;
-          socket.send(JSON.stringify({ type: 'UPDATE_STATE', state: stateRef.current }));
+    const unsubscribe = onSnapshot(gameDoc, (snapshot) => {
+      if (snapshot.exists()) {
+        const remoteState = snapshot.data() as GameState;
+        const mergedState = { ...INITIAL_STATE, ...remoteState };
+        
+        // Only update if the state is actually different
+        if (JSON.stringify(mergedState) !== JSON.stringify(stateRef.current)) {
+          isUpdatingFromRemote.current = true;
+          setState(mergedState);
+          // Small timeout to reset the flag after the state update cycle
+          setTimeout(() => { isUpdatingFromRemote.current = false; }, 50);
         }
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'UPDATE_STATE' && data.state) {
-            const mergedState = { ...INITIAL_STATE, ...data.state };
-            const newStateStr = JSON.stringify(mergedState);
-            // Only update if the state is actually different to prevent flickering/loops
-            if (newStateStr !== JSON.stringify(stateRef.current)) {
-              setState(mergedState);
-              if (!isOverlayMode) {
-                lastSentStateRef.current = newStateStr;
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Sync error", e);
-        }
-      };
-
-      socket.onclose = () => {
-        console.log("Disconnected, retrying...");
-        setTimeout(connect, 2000);
-      };
-    };
-
-    connect();
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
+      } else if (!isOverlayMode) {
+        // If doc doesn't exist and we are the operator, create it
+        setDoc(gameDoc, INITIAL_STATE);
       }
-    };
+    }, (error) => {
+      console.error("Firestore sync error:", error);
+    });
+
+    return () => unsubscribe();
   }, [isOverlayMode]);
 
   useEffect(() => {
-    const stateStr = JSON.stringify(state);
-    if (!isOverlayMode && socketRef.current?.readyState === WebSocket.OPEN) {
-      // Only send if the state has actually changed from what we last sent/received
-      if (stateStr !== lastSentStateRef.current) {
-        lastSentStateRef.current = stateStr;
-        socketRef.current.send(JSON.stringify({ type: 'UPDATE_STATE', state }));
-      }
-    }
-    // Still save to localStorage as a local backup
-    if (!isOverlayMode) {
-      localStorage.setItem('baseball_overlay_state', stateStr);
+    if (!isOverlayMode && !isUpdatingFromRemote.current) {
+      const gameDoc = doc(db, 'games', 'current');
+      setDoc(gameDoc, state).catch(err => console.error("Error updating Firestore:", err));
+      localStorage.setItem('baseball_overlay_state', JSON.stringify(state));
     }
   }, [state, isOverlayMode]);
 
@@ -636,9 +602,8 @@ export default function App() {
             onClick={() => {
               localStorage.removeItem('baseball_overlay_state');
               setState(INITIAL_STATE);
-              if (socketRef.current?.readyState === WebSocket.OPEN) {
-                socketRef.current.send(JSON.stringify({ type: 'UPDATE_STATE', state: INITIAL_STATE }));
-              }
+              const gameDoc = doc(db, 'games', 'current');
+              setDoc(gameDoc, INITIAL_STATE);
             }} 
             className="flex items-center gap-2 px-4 py-2 bg-wbc-red/10 hover:bg-wbc-red/20 text-wbc-red border border-red-500/20 rounded-lg transition-all text-sm font-bold"
           >
