@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronUp, ChevronDown, Plus, Minus, RotateCcw, Settings, Monitor, Layout, Trophy, PartyPopper, Star } from 'lucide-react';
-import { db } from './lib/firebase';
+import { db } from './firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 // --- Types & Constants ---
