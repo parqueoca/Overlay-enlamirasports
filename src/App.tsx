@@ -399,6 +399,13 @@ export default function App() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    const timeout = setTimeout(() => {
+      if (isMounted) {
+        setIsLoaded(true);
+      }
+    }, 5000);
+
     const gameDoc = doc(db, 'games', 'current');
     
     const unsubscribe = onSnapshot(gameDoc, (snapshot) => {
@@ -411,16 +418,22 @@ export default function App() {
           setState(mergedState);
           setTimeout(() => { isUpdatingFromRemote.current = false; }, 50);
         }
-        setIsLoaded(true);
       } else if (!isOverlayMode) {
         setDoc(gameDoc, INITIAL_STATE);
-        setIsLoaded(true);
       }
+      setIsLoaded(true);
+      clearTimeout(timeout);
     }, (error) => {
       console.error("Firestore sync error:", error);
+      setIsLoaded(true);
+      clearTimeout(timeout);
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [isOverlayMode]);
 
   useEffect(() => {
