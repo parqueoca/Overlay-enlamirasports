@@ -6,8 +6,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronUp, ChevronDown, Plus, Minus, RotateCcw, Settings, Monitor, Layout, Trophy, PartyPopper, Star } from 'lucide-react';
-import { db } from './firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 // --- Types & Constants ---
 
@@ -368,10 +366,7 @@ export default function App() {
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed && typeof parsed === 'object' && parsed.away) {
-            // Merge with INITIAL_STATE to ensure new fields like showHeader exist
             const merged = { ...INITIAL_STATE, ...parsed };
-            
-            // Sanitize inning
             if (typeof merged.inning !== 'number' || merged.inning > 20 || merged.inning < 1) {
               merged.inning = 1;
             }
@@ -385,64 +380,51 @@ export default function App() {
     return INITIAL_STATE;
   });
 
-  const [isOverlayMode] = useState(() => {
+  const [overlayType] = useState(() => {
     if (typeof window !== 'undefined') {
-      return new URLSearchParams(window.location.search).get('overlay') === 'true';
+      const params = new URLSearchParams(window.location.search);
+      const overlay = params.get('overlay');
+      if (overlay === 'true' || overlay === 'all') return 'all';
+      if (overlay === 'header') return 'header';
+      if (overlay === 'boxscore') return 'boxscore';
+      if (overlay === 'scorebug') return 'scorebug';
     }
-    return false;
+    return null;
   });
 
-  const isUpdatingFromRemote = useRef(false);
+  const isOverlayMode = overlayType !== null;
+
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Sync between tabs using storage event (reliable and avoids loops)
   useEffect(() => {
-    let isMounted = true;
-    const timeout = setTimeout(() => {
-      if (isMounted) {
-        setIsLoaded(true);
-      }
-    }, 5000);
-
-    const gameDoc = doc(db, 'games', 'current');
-    
-    const unsubscribe = onSnapshot(gameDoc, (snapshot) => {
-      if (snapshot.exists()) {
-        const remoteState = snapshot.data() as GameState;
-        const mergedState = { ...INITIAL_STATE, ...remoteState };
-        
-        if (JSON.stringify(mergedState) !== JSON.stringify(stateRef.current)) {
-          isUpdatingFromRemote.current = true;
-          setState(mergedState);
-          setTimeout(() => { isUpdatingFromRemote.current = false; }, 50);
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'baseball_overlay_state' && e.newValue) {
+        try {
+          const newState = JSON.parse(e.newValue);
+          setState(newState);
+        } catch (err) {
+          console.error("Failed to sync state from storage", err);
         }
-      } else if (!isOverlayMode) {
-        setDoc(gameDoc, INITIAL_STATE);
       }
-      setIsLoaded(true);
-      clearTimeout(timeout);
-    }, (error) => {
-      console.error("Firestore sync error:", error);
-      setIsLoaded(true);
-      clearTimeout(timeout);
-    });
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-      clearTimeout(timeout);
     };
-  }, [isOverlayMode]);
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Initial load
+    setIsLoaded(true);
+
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   useEffect(() => {
-    if (!isOverlayMode && !isUpdatingFromRemote.current) {
-      const gameDoc = doc(db, 'games', 'current');
-      setDoc(gameDoc, state).catch(err => console.error("Error updating Firestore:", err));
+    if (!isOverlayMode && isLoaded) {
       localStorage.setItem('baseball_overlay_state', JSON.stringify(state));
     }
-  }, [state, isOverlayMode]);
+  }, [state, isOverlayMode, isLoaded]);
 
   const updateState = useCallback((updater: (prev: GameState) => GameState) => setState(prev => updater(prev)), []);
 
@@ -555,7 +537,7 @@ export default function App() {
       <div className="min-h-screen bg-wbc-blue flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-wbc-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="sports-text text-wbc-gold italic">CONECTANDO A LA NUBE...</p>
+          <p className="sports-text text-wbc-gold italic">CARGANDO PANEL DE CONTROL...</p>
         </div>
       </div>
     );
@@ -565,8 +547,8 @@ export default function App() {
     return (
       <ResponsiveOverlay>
         <AnimatePresence>
-          {state.isFinal && <VictoryOverlay state={state} isPreview={true} />}
-          {state.showHeader && (
+          {state.isFinal && (overlayType === 'all' || overlayType === 'scorebug') && <VictoryOverlay state={state} isPreview={true} />}
+          {state.showHeader && (overlayType === 'all' || overlayType === 'header') && (
             <motion.div 
               key="header-overlay"
               initial={{ y: -100 }}
@@ -577,7 +559,7 @@ export default function App() {
               <HeaderOverlay state={state} />
             </motion.div>
           )}
-          {state.showBoxScore && (
+          {state.showBoxScore && (overlayType === 'all' || overlayType === 'boxscore') && (
             <motion.div
               key="box-score-overlay"
               initial={{ opacity: 0, y: -20 }}
@@ -588,7 +570,7 @@ export default function App() {
               <BoxScore state={state} />
             </motion.div>
           )}
-          {state.showScorebug && (
+          {state.showScorebug && (overlayType === 'all' || overlayType === 'scorebug') && (
             <motion.div 
               key="scorebug-overlay"
               initial={{ y: 100 }}
@@ -622,18 +604,38 @@ export default function App() {
           >
             {state.isFinal ? 'PARTIDO FINALIZADO' : 'MARCAR FINAL'}
           </button>
-          <button onClick={() => window.open(window.location.origin + window.location.pathname + '?overlay=true', '_blank')} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all text-sm font-bold"><Monitor className="w-4 h-4" />Launch Overlay</button>
-          <button 
-            onClick={() => {
-              localStorage.removeItem('baseball_overlay_state');
-              setState(INITIAL_STATE);
-              const gameDoc = doc(db, 'games', 'current');
-              setDoc(gameDoc, INITIAL_STATE);
-            }} 
-            className="flex items-center gap-2 px-4 py-2 bg-wbc-red/10 hover:bg-wbc-red/20 text-wbc-red border border-red-500/20 rounded-lg transition-all text-sm font-bold"
-          >
-            <RotateCcw className="w-4 h-4" />Reset Game
-          </button>
+          <div className="flex gap-2">
+            <div className="relative group/launch">
+              <button className="flex items-center gap-2 px-4 py-2 bg-wbc-gold text-wbc-blue border border-wbc-gold/50 rounded-lg transition-all text-sm font-bold shadow-lg">
+                <Monitor className="w-4 h-4" /> Lanzar Overlay
+              </button>
+              <div className="absolute top-full right-0 mt-2 w-48 bg-[#0a1a2a] border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/launch:opacity-100 group-hover/launch:visible transition-all z-[200] overflow-hidden">
+                {[
+                  { label: 'Todo en uno', type: 'all' },
+                  { label: 'Solo Header', type: 'header' },
+                  { label: 'Solo Box Score', type: 'boxscore' },
+                  { label: 'Solo Scorebug', type: 'scorebug' },
+                ].map(opt => (
+                  <button
+                    key={opt.type}
+                    onClick={() => window.open(window.location.origin + window.location.pathname + `?overlay=${opt.type}`, '_blank')}
+                    className="w-full px-4 py-3 text-left text-xs text-white/80 hover:bg-white/10 hover:text-wbc-gold transition-colors border-b border-white/5 last:border-0"
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                localStorage.removeItem('baseball_overlay_state');
+                setState(INITIAL_STATE);
+              }} 
+              className="flex items-center gap-2 px-4 py-2 bg-wbc-red/10 hover:bg-wbc-red/20 text-wbc-red border border-red-500/20 rounded-lg transition-all text-sm font-bold"
+            >
+              <RotateCcw className="w-4 h-4" />Reset Game
+            </button>
+          </div>
         </div>
       </header>
 
